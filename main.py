@@ -67,19 +67,24 @@ async def background_extractor_worker():
             total_lines = len(session.transcript)
             uncovered = total_lines - session.last_covered_line
 
-            # 触发策略：满 6 条未处理，或距离上次提炼满 45 秒且有新话
+            # 触发策略（1:1 对齐 Cicada Notes.swift 调度机理）：
+            # 1. 开场首版：首批发言满 2 条立即提炼，或首句等待满 20 秒提炼
+            # 2. 会中加速：未处理条数满 6 条提前冲刺提炼
+            # 3. 会中兜底：只要有新发言且距离上次提炼满 45 秒，坚决触发提炼，绝不因条数不足被拦截
             should_trigger = (
                 not session.is_updating
                 and total_lines > 0
+                and uncovered > 0
                 and (
-                    uncovered >= settings.TRIGGER_LINE_BATCH
-                    or (session.last_covered_line == 0 and total_lines >= 2)
-                    or (uncovered > 0 and (now - session.last_update_time) >= settings.UPDATE_INTERVAL_SECONDS)
+                    (session.last_covered_line == 0 and (total_lines >= 2 or (now - session.last_update_time) >= 20.0))
+                    or uncovered >= settings.TRIGGER_LINE_BATCH
+                    or (session.last_covered_line > 0 and (now - session.last_update_time) >= settings.UPDATE_INTERVAL_SECONDS)
                 )
             )
 
             if should_trigger:
-                await run_extraction_pass(force=False)
+                # 既然已满足时间或条数门槛，直接传 force=True 透传放行，彻底消除双重门禁死锁
+                await run_extraction_pass(force=True)
 
         except asyncio.CancelledError:
             break
@@ -114,8 +119,10 @@ async def run_extraction_pass(force: bool = False, final: bool = False):
             logger.warning(f"提炼报告警告: {final_state['error']}")
             await session.broadcast({"type": "status", "data": "error", "message": final_state["error"]})
         else:
-            session.notes = final_state["notes"]
-            session.last_covered_line = final_state["last_covered_line"]
+            if final_state.get("notes"):
+                session.notes = final_state["notes"]
+            if final_state.get("last_covered_line") is not None:
+                session.last_covered_line = final_state["last_covered_line"]
             session.last_update_time = time.time()
 
             # 广播纪要更新
@@ -187,6 +194,8 @@ async def receive_asr_line(line_input: ASRLineInput):
     norm_line = TranscriptLine.from_input(line_input, assigned_id=assigned_num)
 
     session.transcript.append(norm_line)
+    if session.last_update_time == 0.0:
+        session.last_update_time = time.time()
 
     # 毫秒级即时广播原话行
     await session.broadcast({

@@ -617,7 +617,7 @@
       <span id="aiStatus" class="status-tag">AI 空闲</span>
     </div>
     <div class="header-actions">
-      <button id="btnStartSim" onclick="toggleSimulation()">开始模拟 (10s/条)</button>
+      <button id="btnStartSim" onclick="toggleSimulation()">开始模拟</button>
       <button id="btnTrigger" onclick="forceTrigger()">手动提炼</button>
       <button id="btnEnd" class="btn-end" onclick="endMeeting()">结束会议 (生成定稿)</button>
       <button id="btnReset" onclick="resetAll()">重置</button>
@@ -1103,6 +1103,7 @@
       if (isSimulating) {
         toggleSimulation();
       }
+      simIndex = 0;
       const btn = document.getElementById("btnEnd");
       if (btn) {
         btn.disabled = false;
@@ -1115,45 +1116,67 @@
       const btn = document.getElementById("btnStartSim");
       if (isSimulating) {
         isSimulating = false;
-        clearInterval(simTimer);
-        btn.textContent = "开始模拟 (10s/条)";
+        if (simTimer) {
+          clearTimeout(simTimer);
+          simTimer = null;
+        }
+        btn.textContent = "开始模拟";
       } else {
         btn.textContent = "加载语料中...";
         const ok = await ensureMockDataLoaded();
         if (!ok || mockDataset.length === 0) {
           alert("未能从 data/mock_meeting.jsonl 加载到数据，请确认文件存在");
-          btn.textContent = "开始模拟 (10s/条)";
+          btn.textContent = "开始模拟";
           return;
         }
         isSimulating = true;
         btn.textContent = "停止模拟";
-        simIndex = 0;
-        sendNextMockLine();
-        simTimer = setInterval(sendNextMockLine, 10000); // 10秒推送一条内容
+        if (simIndex >= mockDataset.length) {
+          simIndex = 0;
+        }
+        scheduleNextMockLine();
       }
     }
 
-    async function sendNextMockLine() {
-      if (simIndex >= mockDataset.length) {
-        toggleSimulation();
+    // 纯 1:1 原速时间戳推流：根据真实录音时间差精准调度
+    async function scheduleNextMockLine() {
+      if (!isSimulating || simIndex >= mockDataset.length) {
+        if (isSimulating) toggleSimulation();
         return;
       }
-      const item = mockDataset[simIndex];
+
+      const currItem = mockDataset[simIndex];
       simIndex++;
+
       try {
         await fetch("/api/lines", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            line_id: item.line_id || simIndex,
-            t: item.t,
-            speaker: item.speaker,
-            text: item.text
+            line_id: currItem.line_id || simIndex,
+            t: currItem.t,
+            speaker: currItem.speaker,
+            text: currItem.text
           })
         });
       } catch (e) {
         console.error("模拟推流失败", e);
       }
+
+      if (!isSimulating || simIndex >= mockDataset.length) {
+        if (isSimulating) toggleSimulation();
+        return;
+      }
+
+      // 依据下一个发言的真实时间戳 t 计算等待差值 (秒)，进行 1:1 原速等待
+      const nextItem = mockDataset[simIndex];
+      let deltaSec = 1.0;
+      if (nextItem && nextItem.t !== undefined && currItem && currItem.t !== undefined) {
+        deltaSec = Math.max(0.1, nextItem.t - currItem.t);
+      }
+      const delayMs = Math.round(deltaSec * 1000);
+
+      simTimer = setTimeout(scheduleNextMockLine, delayMs);
     }
 
     // 监听用户在右栏的自主滚动行为（飞书逻辑：用户翻看历史时暂停自动滚动，回到近底时恢复）

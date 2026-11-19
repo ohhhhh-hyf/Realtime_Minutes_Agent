@@ -479,3 +479,40 @@ def test_prompt_two_minute_brake_and_final_pass():
     assert "至多" in prompt_final
     assert "个议题" in prompt_final
 
+
+def test_45s_timer_fallback_and_trigger_passthrough():
+    """测试 45 秒定时兜底与触发穿透（防止双重门禁因未满 6 条而拦截）。"""
+    from tasks.graph import evaluate_trigger
+    from core.config import get_settings
+
+    settings = get_settings()
+
+    # 1. 模拟未处理发言仅有 1 条（远未达到 6 条批处理门槛）
+    lines = [
+        TranscriptLine(id=f"L{i}", line_id=i, t=float(i * 10), speaker="发言人", text=f"发言{i}")
+        for i in range(1, 7)
+    ]
+    covered = 5
+    uncovered = len(lines) - covered  # 1 条
+
+    # 场景 A: 常规轮询，若未超时且非强制，evaluate_trigger 保持节流拒识
+    state_normal = {
+        "transcript": lines,
+        "last_covered_line": covered,
+        "force_update": False,
+        "final": False,
+    }
+    res_normal = evaluate_trigger(state_normal)
+    assert res_normal["should_update"] is False
+
+    # 场景 B: 45 秒定时器到期，background_extractor_worker 传入 force=True 穿透放行
+    state_timer_forced = {
+        "transcript": lines,
+        "last_covered_line": covered,
+        "force_update": True,
+        "final": False,
+    }
+    res_forced = evaluate_trigger(state_timer_forced)
+    assert res_forced["should_update"] is True
+
+

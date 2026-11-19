@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     EDITABLE_TOPICS: int = 2              # 会中可编辑/重写的尾部议题数（前面的被 frozen 冻结）
     TOPIC_SUMMARY_LIMIT: int = 160        # 议题摘要字符上限，超长自动截断
     TOPIC_MIN_SPAN_SECONDS: float = 120.0 # 议题最小跨度（2分钟冷却刹车）
+    TOPIC_MIN_POINTS: int = 4             # 议题最低要点门槛（未满 4 个严禁切新议题）
+    TOPIC_MAX_POINTS: int = 10            # 议题最大要点上限（达到 10 个强制熔断切新议题）
     CONTEXT_LINES: int = 2                # 注入的前置上下文行数
 
     model_config = SettingsConfigDict(

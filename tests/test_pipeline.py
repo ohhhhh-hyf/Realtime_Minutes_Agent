@@ -444,16 +444,18 @@ def test_prompt_two_minute_brake_and_final_pass():
         ],
     )
 
-    # 1. 处于展开阶段（讨论不足 120 秒或要点不足 2 个）：注入优先扩充提示
+    # 1. 处于展开阶段（未满 4 个要点或不足 120 秒）：注入强行扩充与自适应重塑提示
     lines_under_2m = [
         TranscriptLine(id="L1", line_id=1, t=60.0, speaker="张三", text="开始讨论网关"),
         TranscriptLine(id="L2", line_id=2, t=110.0, speaker="李四", text="连接池并发需要优化"),
     ]
     prompt_brake = build_user_prompt(notes, lines_under_2m, from_line=1, frozen=0, final=False)
     assert "当前活跃议题" in prompt_brake
-    assert "优先在该议题的 points 列表中扩充新要点" in prompt_brake
+    assert "【议题必须继续扩充与重塑】" in prompt_brake
+    assert "严禁新建议题" in prompt_brake
+    assert "更新该议题的 title" in prompt_brake
 
-    # 2. 讨论已充分（超过 120 秒且要点达到 2 个以上）：不注入初期展开提示
+    # 2. 讨论已充分（超过 120 秒且要点达到 4 个及以上）：不注入必须扩充重塑提示
     notes_with_full_pts = MeetingNotes(
         title="测试会议",
         summary="会议摘要",
@@ -462,7 +464,7 @@ def test_prompt_two_minute_brake_and_final_pass():
                 start=60.0,
                 title="网关改造",
                 summary="网关改造讨论",
-                points=[PointItem(point="要点1", details=[]), PointItem(point="要点2", details=[])],
+                points=[PointItem(point=f"要点{i}", details=[]) for i in range(1, 5)],
             )
         ],
     )
@@ -471,7 +473,8 @@ def test_prompt_two_minute_brake_and_final_pass():
         TranscriptLine(id="L2", line_id=2, t=300.0, speaker="李四", text="下面对齐下季度规划"),
     ]
     prompt_normal = build_user_prompt(notes_with_full_pts, lines_over_2m, from_line=1, frozen=0, final=False)
-    assert "讨论尚在展开阶段" not in prompt_normal
+    assert "未满 4 个要点的最低定案门槛" not in prompt_normal
+    assert "【议题必须继续扩充与重塑】" not in prompt_normal
 
     # 3. 活跃议题要点已达 10 点弹性上限：注入强制定案封顶并新建议题警告
     notes_with_10_pts = MeetingNotes(

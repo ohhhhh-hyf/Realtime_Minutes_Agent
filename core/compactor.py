@@ -34,9 +34,9 @@ class NotesCompactor:
         while len(res) > max(1, count):
             extra = res.pop()
             last = res.pop()
-            # 将 extra 的要点与支撑行合并到 last，保留至多 5 个要点
+            # 将 extra 的要点与支撑行合并到 last，保留至多 6 个要点
             merged_points = last.points + extra.points
-            last.points = merged_points[:5]
+            last.points = merged_points[:6]
             last.evidence = list(dict.fromkeys(last.evidence + extra.evidence))
             res.append(last)
         return res
@@ -44,10 +44,10 @@ class NotesCompactor:
     @staticmethod
     def joined(a: NoteTopic, b: NoteTopic) -> NoteTopic:
         """将两个相邻议题物理合并为一个（对齐 Notes.swift joined）：
-        合并标题与摘要，从各自均匀截取至多 5 个 points。
+        合并标题与摘要，从各自均匀截取至多 6 个 points。
         """
-        from_a = min(len(a.points), max(2, 5 - len(b.points)))
-        from_b = min(len(b.points), 5 - from_a)
+        from_a = min(len(a.points), max(2, 6 - len(b.points)))
+        from_b = min(len(b.points), 6 - from_a)
         merged_points = list(a.points[:from_a] + b.points[:from_b])
 
         gap = "" if (a.summary and a.summary[-1] in "。！？；.!?;") else " "

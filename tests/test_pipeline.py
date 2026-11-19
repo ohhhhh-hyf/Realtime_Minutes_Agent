@@ -444,23 +444,34 @@ def test_prompt_two_minute_brake_and_final_pass():
         ],
     )
 
-    # 1. 距离当前议题开始不足 120 秒：注入刹车
+    # 1. 处于展开阶段（讨论不足 120 秒或要点不足 2 个）：注入优先扩充提示
     lines_under_2m = [
         TranscriptLine(id="L1", line_id=1, t=60.0, speaker="张三", text="开始讨论网关"),
         TranscriptLine(id="L2", line_id=2, t=110.0, speaker="李四", text="连接池并发需要优化"),
     ]
     prompt_brake = build_user_prompt(notes, lines_under_2m, from_line=1, frozen=0, final=False)
-    assert "【重要节奏刹车】" in prompt_brake
-    assert "不足 2 分钟" in prompt_brake
-    assert "严禁开启新建议题" in prompt_brake
+    assert "当前活跃议题" in prompt_brake
+    assert "优先在该议题的 points 列表中扩充新要点" in prompt_brake
 
-    # 2. 距离当前议题开始超过 120 秒：不注入刹车
+    # 2. 讨论已充分（超过 120 秒且要点达到 2 个以上）：不注入初期展开提示
+    notes_with_full_pts = MeetingNotes(
+        title="测试会议",
+        summary="会议摘要",
+        topics=[
+            NoteTopic(
+                start=60.0,
+                title="网关改造",
+                summary="网关改造讨论",
+                points=[PointItem(point="要点1", details=[]), PointItem(point="要点2", details=[])],
+            )
+        ],
+    )
     lines_over_2m = [
         TranscriptLine(id="L1", line_id=1, t=60.0, speaker="张三", text="开始讨论网关"),
         TranscriptLine(id="L2", line_id=2, t=300.0, speaker="李四", text="下面对齐下季度规划"),
     ]
-    prompt_normal = build_user_prompt(notes, lines_over_2m, from_line=1, frozen=0, final=False)
-    assert "【重要节奏刹车】" not in prompt_normal
+    prompt_normal = build_user_prompt(notes_with_full_pts, lines_over_2m, from_line=1, frozen=0, final=False)
+    assert "讨论尚在展开阶段" not in prompt_normal
 
     # 3. 终盘定稿模式（final=True）：全景 8 议题指令
     prompt_final = build_user_prompt(notes, lines_over_2m, from_line=0, frozen=0, final=True)

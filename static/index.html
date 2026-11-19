@@ -15,6 +15,7 @@
       --text-muted: #6b7280;
       --highlight: #f3f4f6;
       --highlight-active: #e5e7eb;
+      --accent: #e8552b;
       --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
       --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
     }
@@ -126,6 +127,26 @@
 
     button.primary:hover {
       background-color: #374151;
+    }
+
+    button.btn-end {
+      background-color: #dc2626;
+      color: #ffffff !important;
+      border-color: #dc2626;
+      font-weight: 500;
+    }
+
+    button.btn-end:hover {
+      background-color: #b91c1c;
+      border-color: #b91c1c;
+    }
+
+    button.btn-end:disabled {
+      background-color: #9ca3af;
+      border-color: #9ca3af;
+      color: #ffffff !important;
+      cursor: not-allowed;
+      opacity: 0.7;
     }
 
     button:disabled {
@@ -598,7 +619,7 @@
     <div class="header-actions">
       <button id="btnStartSim" onclick="toggleSimulation()">开始模拟 (10s/条)</button>
       <button id="btnTrigger" onclick="forceTrigger()">手动提炼</button>
-      <button id="btnEnd" style="background-color: var(--accent); color: #fff; border-color: var(--accent);" onclick="endMeeting()">结束会议 (生成定稿)</button>
+      <button id="btnEnd" class="btn-end" onclick="endMeeting()">结束会议 (生成定稿)</button>
       <button id="btnReset" onclick="resetAll()">重置</button>
     </div>
   </header>
@@ -693,6 +714,16 @@
       if (msg.type === "init") {
         lines = msg.lines || [];
         notes = msg.notes || {};
+        const btn = document.getElementById("btnEnd");
+        if (btn) {
+          if (notes && notes.final) {
+            btn.disabled = true;
+            btn.textContent = "已定稿";
+          } else {
+            btn.disabled = false;
+            btn.textContent = "结束会议 (生成定稿)";
+          }
+        }
         renderLines();
         renderNotes();
         updateAiStatus(msg.status);
@@ -728,6 +759,13 @@
         }
 
         notes = msg.data;
+        if (msg.data && msg.data.final) {
+          const btn = document.getElementById("btnEnd");
+          if (btn) {
+            btn.disabled = true;
+            btn.textContent = "已定稿";
+          }
+        }
         if (newPoints.size > 0) {
           freshItems = newPoints;
           clearTimeout(freshTimer);
@@ -1017,24 +1055,35 @@
 
     // 交互操作函数
     async function endMeeting() {
+      const btn = document.getElementById("btnEnd");
       if (lines.length === 0) {
-        alert("暂无发言记录，无法生成终盘纪要");
+        const orig = btn.textContent;
+        btn.textContent = "暂无发言可定稿";
+        setTimeout(() => { btn.textContent = orig; }, 1500);
         return;
       }
-      if (!confirm("确定结束本次会议并生成至多 8 个议题的全局终盘定稿吗？")) {
-        return;
-      }
+
+      // 如果正在自动模拟推流，自动停止
       if (isSimulating) {
         toggleSimulation();
       }
+
+      // 原地状态平滑过渡，彻底摒弃打断式弹窗
+      btn.disabled = true;
+      btn.textContent = "正在生成定稿...";
+
       try {
         const res = await fetch("/api/end", { method: "POST" });
         if (!res.ok) {
           const err = await res.json();
-          alert(err.detail || "结束会议请求失败");
+          btn.disabled = false;
+          btn.textContent = "结束会议 (生成定稿)";
+          console.error("结束会议失败:", err);
         }
       } catch (e) {
-        alert("请求异常: " + e.message);
+        btn.disabled = false;
+        btn.textContent = "结束会议 (生成定稿)";
+        console.error("请求异常:", e);
       }
     }
 
@@ -1053,6 +1102,11 @@
     async function resetAll() {
       if (isSimulating) {
         toggleSimulation();
+      }
+      const btn = document.getElementById("btnEnd");
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "结束会议 (生成定稿)";
       }
       await fetch("/api/reset", { method: "POST" });
     }

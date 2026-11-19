@@ -473,7 +473,25 @@ def test_prompt_two_minute_brake_and_final_pass():
     prompt_normal = build_user_prompt(notes_with_full_pts, lines_over_2m, from_line=1, frozen=0, final=False)
     assert "讨论尚在展开阶段" not in prompt_normal
 
-    # 3. 终盘定稿模式（final=True）：全景 8 议题指令
+    # 3. 活跃议题要点已达 10 点弹性上限：注入强制定案封顶并新建议题警告
+    notes_with_10_pts = MeetingNotes(
+        title="测试会议",
+        summary="会议摘要",
+        topics=[
+            NoteTopic(
+                start=60.0,
+                title="网关改造",
+                summary="网关改造讨论",
+                points=[PointItem(point=f"要点{i}", details=[]) for i in range(1, 11)],
+            )
+        ],
+    )
+    prompt_capped = build_user_prompt(notes_with_10_pts, lines_over_2m, from_line=1, frozen=0, final=False)
+    assert "【议题容量已达上限警告】" in prompt_capped
+    assert "已达 10 点最大弹性上限" in prompt_capped
+    assert "开启一个全新的议题" in prompt_capped
+
+    # 4. 终盘定稿模式（final=True）：全景 8 议题指令
     prompt_final = build_user_prompt(notes, lines_over_2m, from_line=0, frozen=0, final=True)
     assert "刚刚结束的会议" in prompt_final
     assert "至多" in prompt_final

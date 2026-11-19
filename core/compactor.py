@@ -34,9 +34,9 @@ class NotesCompactor:
         while len(res) > max(1, count):
             extra = res.pop()
             last = res.pop()
-            # 将 extra 的要点与支撑行合并到 last，保留至多 6 个要点
+            # 将 extra 的要点与支撑行合并到 last，保留至多 10 个弹性要点
             merged_points = last.points + extra.points
-            last.points = merged_points[:6]
+            last.points = merged_points[:10]
             last.evidence = list(dict.fromkeys(last.evidence + extra.evidence))
             res.append(last)
         return res
@@ -44,10 +44,10 @@ class NotesCompactor:
     @staticmethod
     def joined(a: NoteTopic, b: NoteTopic) -> NoteTopic:
         """将两个相邻议题物理合并为一个（对齐 Notes.swift joined）：
-        合并标题与摘要，从各自均匀截取至多 6 个 points。
+        合并标题与摘要，从各自均匀截取至多 10 个 points（最大弹性上限）。
         """
-        from_a = min(len(a.points), max(2, 6 - len(b.points)))
-        from_b = min(len(b.points), 6 - from_a)
+        from_a = min(len(a.points), max(2, 10 - len(b.points)))
+        from_b = min(len(b.points), 10 - from_a)
         merged_points = list(a.points[:from_a] + b.points[:from_b])
 
         gap = "" if (a.summary and a.summary[-1] in "。！？；.!?;") else " "
@@ -169,6 +169,10 @@ class NotesCompactor:
 
         merged = cls.capped(kept + tail, live_max_topics)
         merged.sort(key=lambda t: t.start)
+        # 单个议题弹性上限硬防线：确保任何议题的要点均不超出 10 个
+        for t in merged:
+            if len(t.points) > 10:
+                t.points = t.points[:10]
         return merged
 
     @staticmethod
@@ -215,6 +219,11 @@ class NotesCompactor:
                 frozen=frozen,
                 live_max_topics=live_max_topics,
             )
+
+        # 确保所有议题的 points 绝不超出 10 个弹性上限
+        for t in final_topics:
+            if len(t.points) > 10:
+                t.points = t.points[:10]
 
         # 3. 术语保序
         final_terms = cls.keeping_terms_order(old_notes.terms, next_notes.terms)

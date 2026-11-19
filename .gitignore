@@ -1,0 +1,38 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment and sensitive keys
+.env
+*.env.local
+!.env.example
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# IDE & editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+
+# Logs and runtime artifacts
+*.log
+logs/
+tmp/
+
+# OS generated files
+.DS_Store
+Thumbs.db

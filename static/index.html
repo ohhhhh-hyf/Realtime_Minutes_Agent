@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>实时会议纪要测试看板</title>
+  <style>
+    :root {
+      --bg-main: #f9fafb;
+      --bg-card: #ffffff;
+      --border-color: #e5e7eb;
+      --border-dark: #d1d5db;
+      --text-main: #111827;
+      --text-sub: #4b5563;
+      --text-muted: #6b7280;
+      --highlight: #f3f4f6;
+      --highlight-active: #e5e7eb;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* 顶部控制栏 */
+    header {
+      background-color: var(--bg-card);
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .app-title {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.2px;
+    }
+
+    .status-tag {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      padding: 2px 8px;
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-main);
+      color: var(--text-sub);
+      border-radius: 2px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .status-dot.idle {
+      background-color: #10b981;
+    }
+
+    .status-dot.updating {
+      background-color: #e8552b;
+      animation: liveDotPulse 1.2s infinite ease-in-out;
+    }
+
+    .status-dot.error {
+      background-color: #ef4444;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    button {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-dark);
+      color: var(--text-main);
+      padding: 6px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: background-color 0.15s, border-color 0.15s;
+    }
+
+    button:hover {
+      background-color: var(--highlight);
+    }
+
+    button:active {
+      background-color: var(--highlight-active);
+    }
+
+    button.primary {
+      background-color: #111827;
+      color: #ffffff;
+      border-color: #111827;
+    }
+
+    button.primary:hover {
+      background-color: #374151;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* 双栏主体 */
+    main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background-color: var(--bg-card);
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* 飞书风格：悬浮回到最新纪要小胶囊 */
+    .scroll-follow-pill {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background-color: #111827;
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 20px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      cursor: pointer;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      z-index: 20;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      user-select: none;
+    }
+
+    .scroll-follow-pill.show {
+      opacity: 0.95;
+      pointer-events: auto;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .scroll-follow-pill:hover {
+      opacity: 1;
+      background-color: #1f2937;
+    }
+
+    .pane-divider {
+      width: 1px;
+      background-color: var(--border-color);
+    }
+
+    .pane-header {
+      padding: 10px 16px;
+      background-color: var(--bg-main);
+      border-bottom: 1px solid var(--border-color);
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-sub);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .pane-count {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-weight: normal;
+    }
+
+    .pane-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    /* 左栏：原话流水 */
+    .line-row {
+      padding: 6px 8px;
+      margin-bottom: 4px;
+      border-radius: 2px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      transition: background-color 0.2s;
+    }
+
+    .line-row:hover {
+      background-color: var(--highlight);
+    }
+
+    .line-row.active-jump {
+      background-color: #e5e7eb;
+    }
+
+    .line-meta {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      user-select: none;
+      padding-top: 1px;
+    }
+
+    .line-speaker {
+      font-weight: 600;
+      color: var(--text-sub);
+      white-space: nowrap;
+    }
+
+    .line-text {
+      color: var(--text-main);
+      word-break: break-word;
+      flex: 1;
+    }
+
+    /* 右栏：结构化会议纪要 */
+    .notes-container {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .notes-empty {
+      padding: 40px 0;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .notes-section {
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 16px;
+    }
+
+    .notes-section:last-child {
+      border-bottom: none;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .meeting-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--text-main);
+    }
+
+    .meeting-summary {
+      color: var(--text-sub);
+      line-height: 1.6;
+    }
+
+    /* 议题列表与生命力状态过渡 */
+    .topic-card {
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-main);
+      padding: 12px;
+      margin-bottom: 12px;
+      border-radius: 2px;
+      transition: border-color 0.25s ease, background-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .topic-card.is-active {
+      border-left: 3px solid #e8552b;
+      background-color: #ffffff;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    }
+
+    .tag-live {
+      font-size: 11px;
+      font-weight: 600;
+      color: #e8552b;
+      background-color: #fff1eb;
+      border: 1px solid #ffd8cc;
+      padding: 1px 6px;
+      border-radius: 3px;
+      margin-left: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      vertical-align: middle;
+    }
+
+    .tag-live-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background-color: #e8552b;
+      animation: liveDotPulse 1.4s infinite ease-in-out;
+    }
+
+    .tag-fresh {
+      font-size: 10px;
+      font-weight: 600;
+      color: #e8552b;
+      background-color: #fff1eb;
+      border: 1px solid #ffd8cc;
+      padding: 1px 5px;
+      border-radius: 3px;
+      margin-left: 6px;
+      display: inline-block;
+      vertical-align: middle;
+      animation: fadeSlideIn 0.5s ease-out;
+    }
+
+    .point-item {
+      font-size: 13px;
+    }
+
+    .point-item.is-fresh {
+      animation: fadeSlideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes fadeSlideIn {
+      0% {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes liveDotPulse {
+      0%, 100% { opacity: 0.35; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+
+    /* 骨架屏预告微光 */
+    .skeleton-stream {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--border-color);
+      animation: fadeSlideIn 0.3s ease-out;
+    }
+
+    .skeleton-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .skeleton-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: #e8552b;
+      animation: liveDotPulse 1.2s infinite ease-in-out;
+    }
+
+    .skeleton-line {
+      height: 9px;
+      border-radius: 3px;
+      margin-bottom: 6px;
+      background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+      background-size: 200% 100%;
+      animation: skeletonSweep 1.6s infinite ease-in-out;
+    }
+
+    @keyframes skeletonSweep {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    .topic-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 6px;
+    }
+
+    .topic-card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .topic-card-time {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .topic-card-time:hover {
+      text-decoration: underline;
+    }
+
+    .topic-card-summary {
+      font-size: 13px;
+      color: var(--text-sub);
+      margin-bottom: 8px;
+      line-height: 1.5;
+    }
+
+    .topic-points {
+      margin-left: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .point-item {
+      font-size: 13px;
+    }
+
+    .point-main {
+      font-weight: 500;
+      color: var(--text-main);
+    }
+
+    .point-details {
+      margin-left: 16px;
+      margin-top: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .detail-item {
+      color: var(--text-sub);
+      font-size: 12.5px;
+    }
+
+    .detail-prefix {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .topic-consensus {
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed var(--border-color);
+      font-size: 12.5px;
+      color: var(--text-sub);
+    }
+
+    /* 结论与风险 */
+    .item-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .conclusion-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .conclusion-tag {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      padding: 1px 6px;
+      border-radius: 2px;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .tag-decision {
+      border: 1px solid #111827;
+      background-color: #111827;
+      color: #ffffff;
+    }
+
+    .tag-risk {
+      border: 1px solid #4b5563;
+      background-color: #4b5563;
+      color: #ffffff;
+    }
+
+    .tag-open {
+      border: 1px dashed #6b7280;
+      background-color: transparent;
+      color: #374151;
+    }
+
+    .time-anchor {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      cursor: pointer;
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    .time-anchor:hover {
+      text-decoration: underline;
+    }
+
+    /* 待办事项 */
+    .todo-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .todo-checkbox {
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      user-select: none;
+    }
+
+    .todo-meta {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    /* 名词表 */
+    .terms-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .term-chip {
+      background-color: var(--bg-main);
+      border: 1px solid var(--border-color);
+      padding: 2px 8px;
+      font-size: 12px;
+      border-radius: 2px;
+    }
+
+    .term-name {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .term-note {
+      color: var(--text-muted);
+      margin-left: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 顶部控制栏 -->
+  <header>
+    <div class="header-left">
+      <span class="app-title">实时会议纪要测试控制台</span>
+      <span id="connStatus" class="status-tag">连接中...</span>
+      <span id="aiStatus" class="status-tag">AI 空闲</span>
+    </div>
+    <div class="header-actions">
+      <button id="btnStartSim" onclick="toggleSimulation()">开始模拟 (10s/条)</button>
+      <button id="btnTrigger" onclick="forceTrigger()">手动提炼</button>
+      <button id="btnEnd" style="background-color: var(--accent); color: #fff; border-color: var(--accent);" onclick="endMeeting()">结束会议 (生成定稿)</button>
+      <button id="btnReset" onclick="resetAll()">重置</button>
+    </div>
+  </header>
+
+  <!-- 双栏展示区 -->
+  <main>
+    <!-- 左栏：原话流水 -->
+    <div class="pane">
+      <div class="pane-header">
+        <span>发言流水 (ASR 实时推流)</span>
+        <span id="linesCount" class="pane-count">0 行</span>
+      </div>
+      <div id="linesContainer" class="pane-content">
+        <!-- 动态插入发言行 -->
+      </div>
+    </div>
+
+    <div class="pane-divider"></div>
+
+    <!-- 右栏：结构化纪要 -->
+    <div class="pane">
+      <div class="pane-header">
+        <span>会议纪要 (LangGraph 增量提炼)</span>
+        <span id="notesCovered" class="pane-count">已覆盖 0 行</span>
+      </div>
+      <div id="notesContainer" class="pane-content">
+        <div class="notes-empty">暂无会议纪要，正在等待发言数据积攒并提取...</div>
+      </div>
+      <div id="notesFollowPill" class="scroll-follow-pill" onclick="resumeFollow()">
+        ↓ 滚动至最新纪要
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let ws = null;
+    let lines = [];
+    let notes = {};
+    let isSimulating = false;
+    let simTimer = null;
+    let simIndex = 0;
+    let mockDataset = []; // 存储从 data/mock_meeting.jsonl 加载的真实语料
+    let isUpdating = false; // 跟踪 AI 提取状态
+    let freshItems = new Set(); // 记录最新一轮提取的新要点（带生命力过渡）
+    let freshTimer = null; // 60秒生命力计时器
+    let autoFollowNotes = true; // 飞书风格：是否自动跟随最新产出平滑滚动
+
+    async function ensureMockDataLoaded() {
+      if (mockDataset.length > 0) return true;
+      try {
+        const res = await fetch("/api/mock_data");
+        if (res.ok) {
+          mockDataset = await res.json();
+          return true;
+        }
+      } catch (e) {
+        console.error("加载 mock_meeting.jsonl 失败", e);
+      }
+      return false;
+    }
+
+    // 初始化 WebSocket
+    function initWebSocket() {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        document.getElementById("connStatus").textContent = "已连接";
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          handleMessage(msg);
+        } catch (e) {
+          console.error("解析消息失败", e);
+        }
+      };
+
+      ws.onclose = () => {
+        document.getElementById("connStatus").textContent = "已断开 (重连中...)";
+        setTimeout(initWebSocket, 2000);
+      };
+
+      ws.onerror = () => {
+        document.getElementById("connStatus").textContent = "连接错误";
+      };
+    }
+
+    function handleMessage(msg) {
+      if (msg.type === "init") {
+        lines = msg.lines || [];
+        notes = msg.notes || {};
+        renderLines();
+        renderNotes();
+        updateAiStatus(msg.status);
+      } else if (msg.type === "new_line") {
+        lines.push(msg.data);
+        appendLine(msg.data);
+        updateLinesCount();
+      } else if (msg.type === "notes_update") {
+        // 标记本次更新增量加入的 points（与 Cicada markFresh 逻辑 1:1 对齐）
+        const oldPoints = new Set();
+        if (notes && notes.topics) {
+          notes.topics.forEach(t => {
+            if (t.points) {
+              t.points.forEach(p => {
+                oldPoints.add(typeof p === "string" ? p : p.point);
+              });
+            }
+          });
+        }
+
+        const newPoints = new Set();
+        if (msg.data && msg.data.topics) {
+          msg.data.topics.forEach(t => {
+            if (t.points) {
+              t.points.forEach(p => {
+                const pt = typeof p === "string" ? p : p.point;
+                if (!oldPoints.has(pt) && oldPoints.size > 0) {
+                  newPoints.add(pt);
+                }
+              });
+            }
+          });
+        }
+
+        notes = msg.data;
+        if (newPoints.size > 0) {
+          freshItems = newPoints;
+          clearTimeout(freshTimer);
+          freshTimer = setTimeout(() => {
+            freshItems.clear();
+            renderNotes();
+          }, 60000); // 60秒后自动退去
+        }
+
+        renderNotes();
+      } else if (msg.type === "status") {
+        updateAiStatus(msg.data);
+      } else if (msg.type === "reset") {
+        lines = [];
+        notes = {};
+        isUpdating = false;
+        autoFollowNotes = true;
+        showNotesFollowPill(false);
+        freshItems.clear();
+        clearTimeout(freshTimer);
+        renderLines();
+        renderNotes();
+        updateAiStatus("idle");
+      }
+    }
+
+    function updateAiStatus(status) {
+      const el = document.getElementById("aiStatus");
+      const wasUpdating = isUpdating;
+      if (status === "updating") {
+        isUpdating = true;
+        el.innerHTML = '<span class="status-dot updating"></span>AI 提炼中...';
+      } else if (status === "error") {
+        isUpdating = false;
+        el.innerHTML = '<span class="status-dot error"></span>提炼异常';
+      } else {
+        isUpdating = false;
+        el.innerHTML = '<span class="status-dot idle"></span>AI 空闲';
+      }
+      // 状态切换时就地更新骨架条
+      if (wasUpdating !== isUpdating) {
+        renderNotes();
+      }
+    }
+
+    function updateLinesCount() {
+      document.getElementById("linesCount").textContent = `${lines.length} 行`;
+    }
+
+    // 格式化时间
+    function formatTime(sec) {
+      if (sec === null || sec === undefined) return "";
+      const total = Math.floor(sec);
+      const m = Math.floor(total / 60);
+      const s = total % 60;
+      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    // 渲染左栏原话流水
+    function renderLines() {
+      const container = document.getElementById("linesContainer");
+      container.innerHTML = "";
+      lines.forEach(item => {
+        container.appendChild(createLineElement(item));
+      });
+      updateLinesCount();
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function appendLine(item) {
+      const container = document.getElementById("linesContainer");
+      container.appendChild(createLineElement(item));
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function createLineElement(item) {
+      const div = document.createElement("div");
+      div.className = "line-row";
+      div.id = `line-${item.id}`;
+
+      div.innerHTML = `
+        <span class="line-meta">${item.id} ${formatTime(item.t)}</span>
+        <span class="line-speaker">${escapeHtml(item.speaker)}:</span>
+        <span class="line-text">${escapeHtml(item.text)}</span>
+      `;
+      return div;
+    }
+
+    // 平滑滚动定位到原话
+    function jumpToLine(lineId) {
+      if (!lineId) return;
+      const el = document.getElementById(`line-${lineId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("active-jump");
+        setTimeout(() => el.classList.remove("active-jump"), 1800);
+      }
+    }
+
+    // 渲染右栏会议纪要
+    function renderNotes() {
+      const container = document.getElementById("notesContainer");
+      const prevScrollTop = container.scrollTop;
+      document.getElementById("notesCovered").textContent = `已覆盖 ${notes.covered || 0} 行`;
+
+      if (!notes || (!notes.summary && (!notes.topics || notes.topics.length === 0))) {
+        if (isUpdating) {
+          container.innerHTML = `
+            <div class="notes-empty" style="text-align: left; padding: 20px 16px;">
+              <div class="skeleton-hint" style="margin-bottom: 12px;">
+                <span class="skeleton-dot"></span> 正在提炼首版会议纪要...
+              </div>
+              <div class="skeleton-line" style="width: 88%; height: 11px; margin-bottom: 8px;"></div>
+              <div class="skeleton-line" style="width: 72%; height: 11px; margin-bottom: 8px;"></div>
+              <div class="skeleton-line" style="width: 50%; height: 11px;"></div>
+            </div>
+          `;
+        } else {
+          container.innerHTML = '<div class="notes-empty">暂无会议纪要，正在等待发言数据积攒并提取...</div>';
+        }
+        return;
+      }
+
+      let html = '<div class="notes-container">';
+
+      // 1. 标题与总结
+      const finalBadge = notes.final
+        ? '<span style="display:inline-block; margin-left:8px; padding:2px 8px; border-radius:10px; font-size:11px; background:#dcfce7; color:#166534; font-weight:600; vertical-align:middle;">定稿 (全场 8 议题已生成)</span>'
+        : '';
+      html += `
+        <div class="notes-section">
+          <div class="meeting-title">${escapeHtml(notes.title || "会议纪要")}${finalBadge}</div>
+          <div class="meeting-summary">${escapeHtml(notes.summary || "")}</div>
+        </div>
+      `;
+
+      // 2. 内容梳理
+      if (notes.topics && notes.topics.length > 0) {
+        html += `<div class="notes-section"><div class="section-title">内容梳理</div>`;
+        notes.topics.forEach((topic, idx) => {
+          const isLastTopic = (idx === notes.topics.length - 1);
+          const firstEv = (topic.evidence && topic.evidence.length > 0) ? topic.evidence[0] : "";
+          html += `
+            <div class="topic-card ${isLastTopic ? 'is-active' : ''}">
+              <div class="topic-card-header">
+                <div style="display:flex; align-items:center;">
+                  <span class="topic-card-title">${escapeHtml(topic.title)}</span>
+                  ${isLastTopic ? '<span class="tag-live"><span class="tag-live-dot"></span>正在讲</span>' : ''}
+                </div>
+                <span class="topic-card-time" onclick="jumpToLine('${firstEv}')">${formatTime(topic.start)}</span>
+              </div>
+              <div class="topic-card-summary">${escapeHtml(topic.summary)}</div>
+          `;
+
+          // 要点与细化展开（无 details 时单行清爽呈现，有 details 时缩进展开）
+          if (topic.points && topic.points.length > 0) {
+            html += `<div class="topic-points">`;
+            topic.points.forEach(p => {
+              const pointText = typeof p === "string" ? p : p.point;
+              const details = (p && p.details) ? p.details : [];
+              const isFresh = freshItems.has(pointText);
+
+              html += `<div class="point-item ${isFresh ? 'is-fresh' : ''}">`;
+              html += `<div class="point-main">• ${escapeHtml(pointText)}${isFresh ? '<span class="tag-fresh">新</span>' : ''}</div>`;
+              // details 至多 1 条有意义的事实细节
+              const validDetails = details.slice(0, 1);
+              if (validDetails.length > 0) {
+                html += `<div class="point-details">`;
+                validDetails.forEach(d => {
+                  html += `<div class="detail-item">– ${formatDetailLine(d)}</div>`;
+                });
+                html += `</div>`;
+              }
+              html += `</div>`;
+            });
+            html += `</div>`;
+          }
+
+          if (topic.fishbone && topic.fishbone.branches && topic.fishbone.branches.length > 0) {
+            html += `<div style="margin-top:8px; padding:6px 8px; background:#ffffff; border:1px solid #e5e7eb; border-radius:2px;">`;
+            html += `<div style="font-size:12px; font-weight:600; color:#374151; margin-bottom:4px;">原因分析（${escapeHtml(topic.fishbone.question || "核心问题分析")}）：</div>`;
+            topic.fishbone.branches.forEach(b => {
+              html += `<div style="font-size:12px; color:#4b5563; margin-left:6px; margin-bottom:2px;">• <b>[${escapeHtml(b.label)}]</b> ${escapeHtml(b.detail)}</div>`;
+            });
+            html += `</div>`;
+          }
+
+          if (topic.consensus) {
+            html += `<div class="topic-consensus">共识：${escapeHtml(topic.consensus)}</div>`;
+          }
+
+          // 核心骨架屏预告：如果正在提炼中且是当前最新的议题，就地渲染微光扫动骨架条！
+          if (isLastTopic && isUpdating) {
+            html += `
+              <div class="skeleton-stream">
+                <div class="skeleton-hint">
+                  <span class="skeleton-dot"></span> AI 正在提炼最新讨论...
+                </div>
+                <div class="skeleton-line" style="width: 82%;"></div>
+                <div class="skeleton-line" style="width: 56%;"></div>
+              </div>
+            `;
+          }
+
+          html += `</div>`;
+        });
+        html += `</div>`;
+      }
+
+      // 3. 结论（独立卡片块，最多5条定论，无结论时自动隐去）
+      if (notes.conclusions && notes.conclusions.length > 0) {
+        html += `<div class="notes-section"><div class="section-title">结论</div><div class="item-list">`;
+        notes.conclusions.forEach(c => {
+          const ev = (c.evidence && c.evidence.length > 0) ? c.evidence[0] : "";
+          html += `
+            <div class="conclusion-row">
+              <span style="color:#111827; font-weight:bold; margin-right:4px;">•</span>
+              <span style="flex:1;">${escapeHtml(c.text)}</span>
+              ${c.t !== null && c.t !== undefined ? `<span class="time-anchor" onclick="jumpToLine('${ev}')">${formatTime(c.t)}</span>` : ""}
+            </div>
+          `;
+        });
+        html += `</div></div>`;
+      }
+
+      // 4. 待办（独立卡片块，仅真实确凿待办，无待办时自动隐去）
+      if (notes.todos && notes.todos.length > 0) {
+        html += `<div class="notes-section"><div class="section-title">待办</div><div class="item-list">`;
+        notes.todos.forEach(t => {
+          let metaParts = [];
+          if (t.owner) metaParts.push(escapeHtml(t.owner));
+          if (t.deadline) metaParts.push(`deadline: ${escapeHtml(t.deadline)}`);
+          const metaStr = metaParts.length > 0 ? ` (${metaParts.join(" · ")})` : "";
+          const ev = (t.evidence && t.evidence.length > 0) ? t.evidence[0] : "";
+
+          html += `
+            <div class="todo-row">
+              <span class="todo-checkbox">[ ]</span>
+              <span style="flex:1;">${escapeHtml(t.text)}<span class="todo-meta">${metaStr}</span></span>
+              ${t.t !== null && t.t !== undefined ? `<span class="time-anchor" onclick="jumpToLine('${ev}')">${formatTime(t.t)}</span>` : ""}
+            </div>
+          `;
+        });
+        html += `</div></div>`;
+      }
+
+      // 5. 专有名词（后端契约与反哺逻辑完整保留，前端不进行 UI 展示）
+
+      html += '</div>';
+      container.innerHTML = html;
+
+      // 飞书风格：随着纪要流动产出，自动平滑向下滑动到最新产出
+      if (autoFollowNotes) {
+        requestAnimationFrame(() => {
+          container.scrollTo({
+            top: container.scrollHeight,
+            behavior: "smooth"
+          });
+        });
+      } else {
+        // 用户正在上方翻阅历史，保持其当前视口不动，不粗暴打扰阅读
+        container.scrollTop = prevScrollTop;
+      }
+    }
+
+    // 智能解析 details 中的“小标题：内容”并加粗冒号前标题
+    function formatDetailLine(text) {
+      if (!text) return "";
+      const colonIndex = text.indexOf("：") !== -1 ? text.indexOf("：") : text.indexOf(":");
+      if (colonIndex > 0 && colonIndex <= 10) {
+        const prefix = text.substring(0, colonIndex);
+        const rest = text.substring(colonIndex + 1);
+        return `<span class="detail-prefix">${escapeHtml(prefix)}：</span>${escapeHtml(rest)}`;
+      }
+      return escapeHtml(text);
+    }
+
+    function escapeHtml(str) {
+      if (!str) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // 交互操作函数
+    async function endMeeting() {
+      if (lines.length === 0) {
+        alert("暂无发言记录，无法生成终盘纪要");
+        return;
+      }
+      if (!confirm("确定结束本次会议并生成至多 8 个议题的全局终盘定稿吗？")) {
+        return;
+      }
+      if (isSimulating) {
+        toggleSimulation();
+      }
+      try {
+        const res = await fetch("/api/end", { method: "POST" });
+        if (!res.ok) {
+          const err = await res.json();
+          alert(err.detail || "结束会议请求失败");
+        }
+      } catch (e) {
+        alert("请求异常: " + e.message);
+      }
+    }
+
+    async function forceTrigger() {
+      try {
+        const res = await fetch("/api/trigger", { method: "POST" });
+        if (!res.ok) {
+          const err = await res.json();
+          alert(err.detail || "触发失败");
+        }
+      } catch (e) {
+        alert("请求异常: " + e.message);
+      }
+    }
+
+    async function resetAll() {
+      if (isSimulating) {
+        toggleSimulation();
+      }
+      await fetch("/api/reset", { method: "POST" });
+    }
+
+    async function toggleSimulation() {
+      const btn = document.getElementById("btnStartSim");
+      if (isSimulating) {
+        isSimulating = false;
+        clearInterval(simTimer);
+        btn.textContent = "开始模拟 (10s/条)";
+      } else {
+        btn.textContent = "加载语料中...";
+        const ok = await ensureMockDataLoaded();
+        if (!ok || mockDataset.length === 0) {
+          alert("未能从 data/mock_meeting.jsonl 加载到数据，请确认文件存在");
+          btn.textContent = "开始模拟 (10s/条)";
+          return;
+        }
+        isSimulating = true;
+        btn.textContent = "停止模拟";
+        simIndex = 0;
+        sendNextMockLine();
+        simTimer = setInterval(sendNextMockLine, 10000); // 10秒推送一条内容
+      }
+    }
+
+    async function sendNextMockLine() {
+      if (simIndex >= mockDataset.length) {
+        toggleSimulation();
+        return;
+      }
+      const item = mockDataset[simIndex];
+      simIndex++;
+      try {
+        await fetch("/api/lines", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            line_id: item.line_id || simIndex,
+            t: item.t,
+            speaker: item.speaker,
+            text: item.text
+          })
+        });
+      } catch (e) {
+        console.error("模拟推流失败", e);
+      }
+    }
+
+    // 监听用户在右栏的自主滚动行为（飞书逻辑：用户翻看历史时暂停自动滚动，回到近底时恢复）
+    function setupNotesScrollListener() {
+      const container = document.getElementById("notesContainer");
+      if (!container) return;
+      container.addEventListener("scroll", () => {
+        const distFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        if (distFromBottom > 80) {
+          autoFollowNotes = false;
+          showNotesFollowPill(true);
+        } else {
+          autoFollowNotes = true;
+          showNotesFollowPill(false);
+        }
+      });
+    }
+
+    function showNotesFollowPill(show) {
+      const pill = document.getElementById("notesFollowPill");
+      if (pill) {
+        if (show) pill.classList.add("show");
+        else pill.classList.remove("show");
+      }
+    }
+
+    function resumeFollow() {
+      autoFollowNotes = true;
+      const container = document.getElementById("notesContainer");
+      if (container) {
+        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+      }
+      showNotesFollowPill(false);
+    }
+
+    window.onload = () => {
+      initWebSocket();
+      setupNotesScrollListener();
+    };
+  </script>
+</body>
+</html>

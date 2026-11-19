@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>实时会议纪要测试看板</title>
+  <title>实时纪要提取</title>
   <style>
     :root {
       --bg-main: #f9fafb;
@@ -612,7 +612,7 @@
   <!-- 顶部控制栏 -->
   <header>
     <div class="header-left">
-      <span class="app-title">实时会议纪要测试控制台</span>
+      <span class="app-title">实时纪要提取</span>
       <span id="connStatus" class="status-tag">连接中...</span>
       <span id="aiStatus" class="status-tag">AI 空闲</span>
     </div>
@@ -629,7 +629,7 @@
     <!-- 左栏：原话流水 -->
     <div class="pane">
       <div class="pane-header">
-        <span>发言流水 (ASR 实时推流)</span>
+        <span>发言流水</span>
         <span id="linesCount" class="pane-count">0 行</span>
       </div>
       <div id="linesContainer" class="pane-content">
@@ -642,7 +642,7 @@
     <!-- 右栏：结构化纪要 -->
     <div class="pane">
       <div class="pane-header">
-        <span>会议纪要 (LangGraph 增量提炼)</span>
+        <span>会议纪要</span>
         <span id="notesCovered" class="pane-count">已覆盖 0 行</span>
       </div>
       <div id="notesContainer" class="pane-content">

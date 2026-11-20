@@ -5,32 +5,32 @@ from pydantic import BaseModel, Field, model_validator, field_validator
 
 
 class PointItem(BaseModel):
-    """议题下的单个论点项（主干论点 + 展开阐述）。"""
+    """议题下的单个论点项（论据一体化，彻底拔除 details，1:1 对齐 Cicada 原生架构）。"""
 
-    point: str = Field(..., description="核心主干论点或论题（一句清晰完整的话）")
-    details: List[str] = Field(
-        default_factory=list,
-        description="展开阐述（至多1条有意义事实，无关键事实依据时为空列表）",
-    )
+    text: str = Field(..., description="论据一体化核心要点（完整断言，融入关键量化事实）")
+    evidence: List[str] = Field(default_factory=list, description="支撑原话行号")
 
     @model_validator(mode="before")
     @classmethod
     def normalize_input(cls, data: Any) -> Any:
         if isinstance(data, str):
-            return {"point": data, "details": []}
+            return {"text": data, "evidence": []}
         if isinstance(data, dict):
-            # 容错：如果模型返回 text 或 title 而不是 point
-            if "point" not in data or not data["point"]:
-                data["point"] = data.get("text") or data.get("title") or data.get("content") or "论点阐述"
-            # 容错与约束：details 至多保留1条实质事实内容
-            if "details" in data:
-                if isinstance(data["details"], str):
-                    s = data["details"].strip()
-                    data["details"] = [s] if s else []
-                elif isinstance(data["details"], list):
-                    cleaned = [str(d).strip() for d in data["details"] if str(d).strip()]
-                    data["details"] = cleaned[:1]
+            # 兼容 text / point / content / title
+            text_val = data.get("text") or data.get("point") or data.get("content") or data.get("title") or "论点阐述"
+            ev = data.get("evidence") or []
+            if isinstance(ev, str):
+                ev = [ev] if ev else []
+            return {"text": str(text_val).strip(), "evidence": ev}
         return data
+
+    @property
+    def point(self) -> str:
+        """兼容已有代码与测试的 .point 属性访问。"""
+        return self.text
+
+    def __str__(self) -> str:
+        return self.text
 
 
 class FishboneBranch(BaseModel):
@@ -102,12 +102,12 @@ class Fishbone(BaseModel):
 
 
 class NoteTopic(BaseModel):
-    """单个议题结构。"""
+    """单个议题结构（1:1 对齐 Cicada 原生架构，论据一体化，彻底拔除 details）。"""
 
     start: float = Field(default=0.0, description="议题起始时间戳秒数")
     title: str = Field(default="", description="议题简短标题")
     summary: str = Field(default="", description="该议题1句话精炼总结")
-    points: List[PointItem] = Field(default_factory=list, description="议题下的论点列表")
+    points: List[PointItem] = Field(default_factory=list, description="议题下的论点列表（论据一体化）")
     consensus: Optional[str] = Field(default=None, description="现场达成的局部共识")
     evidence: List[str] = Field(default_factory=list, description="议题支撑原话行号")
     fishbone: Optional[Fishbone] = Field(default=None, description="原因分析鱼骨图")

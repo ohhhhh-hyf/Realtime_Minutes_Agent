@@ -3,7 +3,7 @@
 覆盖范围：
 1. ASR 4 字段严格边界校验；
 2. 纪要结构与结论三分类（decision, risk, open）校验；
-3. 待办 deadline 字段与议题 details 校验；
+3. 待办 deadline 字段与议题 points 论据一体化校验；
 4. 状态脱水机 Compactor 时间戳与议题保护测试；
 5. FastAPI REST 接口行为回归。
 """
@@ -124,7 +124,7 @@ def test_fishbone_category_cause_mapping():
                 "start": 10.0,
                 "title": "成本控制与利润率",
                 "summary": "深入剖析成本失控",
-                "points": [{"point": "利润率不可观", "details": []}],
+                "points": [{"text": "利润率不可观", "evidence": ["L1"]}],
                 "fishbone": {
                     "question": "成本控制失控根因",
                     "branches": [
@@ -143,7 +143,7 @@ def test_fishbone_category_cause_mapping():
 
 
 def test_todo_deadline_and_points_details():
-    """待办 deadline 与议题 points 自适应。"""
+    """待办 deadline 与议题 points 论据一体化（彻底拔除 details）。"""
     # 待办带截止时间
     todo_with_dl = NoteTodo(
         text="完成网关重构",
@@ -159,16 +159,18 @@ def test_todo_deadline_and_points_details():
 
     # PointItem 字符串自动升级为结构
     point_from_str = PointItem.model_validate("纯文本主干论点")
+    assert point_from_str.text == "纯文本主干论点"
     assert point_from_str.point == "纯文本主干论点"
-    assert point_from_str.details == []
+    assert point_from_str.evidence == []
 
-    # PointItem 严格约束 details 至多 1 条有意义细节
-    point_with_details = PointItem(
-        point="核心延迟瓶颈分析",
-        details=["耗时瓶颈：串行依赖耗时 3.2 秒", "资源限制：连接池仅支持 200 并发"],
+    # PointItem 论据一体化对象与支撑原话
+    point_with_ev = PointItem(
+        text="实际支出达390万元（含人工、外援配音与租机），利润率仅约24%~27%，非常不可观",
+        evidence=["L1", "L2"],
     )
-    assert len(point_with_details.details) == 1
-    assert point_with_details.details[0] == "耗时瓶颈：串行依赖耗时 3.2 秒"
+    assert point_with_ev.text.startswith("实际支出达390万元")
+    assert point_with_ev.point.startswith("实际支出达390万元")
+    assert point_with_ev.evidence == ["L1", "L2"]
 
 
 # ==============================================================================
@@ -185,7 +187,7 @@ def test_compactor_carry_times_and_protection():
                 start=10.0,
                 title="网关现状",
                 summary="现状分析",
-                points=[PointItem(point="延迟超标", details=[])],
+                points=[PointItem(text="延迟超标")],
             )
         ],
         conclusions=[
@@ -207,7 +209,7 @@ def test_compactor_carry_times_and_protection():
                 start=0.0,
                 title="压测规划",
                 summary="压测方案",
-                points=[PointItem(point="10万QPS", details=[])],
+                points=[PointItem(text="10万QPS")],
                 evidence=["L8"],
             )
         ],
@@ -355,8 +357,8 @@ def test_compactor_capped_and_joined():
         title="技术选型",
         summary="关于网关的技术选型探讨。",
         points=[
-            PointItem(point="方案A性能高", details=["QPS超10万"]),
-            PointItem(point="方案A维护成本大", details=[]),
+            PointItem(text="方案A性能高（QPS超10万）"),
+            PointItem(text="方案A维护成本大"),
         ],
         evidence=["L1", "L2"],
     )
@@ -365,8 +367,8 @@ def test_compactor_capped_and_joined():
         title="风险评估",
         summary="系统并发风险评估。",
         points=[
-            PointItem(point="连接池耗尽风险", details=["并发达200即阻塞"]),
-            PointItem(point="超时重试风暴", details=[]),
+            PointItem(text="连接池耗尽风险（并发达200即阻塞）"),
+            PointItem(text="超时重试风暴"),
         ],
         evidence=["L3", "L4"],
     )
@@ -381,7 +383,7 @@ def test_compactor_capped_and_joined():
     assert set(joined_topic.evidence) == {"L1", "L2", "L3", "L4"}
 
     # 2. 验证 capped
-    t3 = NoteTopic(start=80.0, title="后续待办", summary="排期待办", points=[PointItem(point="周五上线", details=[])])
+    t3 = NoteTopic(start=80.0, title="后续待办", summary="排期待办", points=[PointItem(text="周五上线")])
     capped_list = NotesCompactor.capped([t1, t2, t3], count=2)
     assert len(capped_list) == 2
     assert capped_list[0].title == "技术选型"
@@ -409,7 +411,7 @@ def test_compactor_live_max_topics_auto_merge():
                 start=float(s),
                 title=f"议题{i}",
                 summary=f"议题{i}摘要",
-                points=[PointItem(point=f"要点{i}", details=[])],
+                points=[PointItem(text=f"要点{i}")],
             )
         )
 
@@ -439,7 +441,7 @@ def test_prompt_two_minute_brake_and_final_pass():
                 start=60.0,
                 title="网关改造",
                 summary="网关改造讨论",
-                points=[PointItem(point="要点1", details=[])],
+                points=[PointItem(text="要点1")],
             )
         ],
     )
@@ -464,7 +466,7 @@ def test_prompt_two_minute_brake_and_final_pass():
                 start=60.0,
                 title="网关改造",
                 summary="网关改造讨论",
-                points=[PointItem(point=f"要点{i}", details=[]) for i in range(1, 5)],
+                points=[PointItem(text=f"要点{i}") for i in range(1, 5)],
             )
         ],
     )
@@ -485,7 +487,7 @@ def test_prompt_two_minute_brake_and_final_pass():
                 start=60.0,
                 title="网关改造",
                 summary="网关改造讨论",
-                points=[PointItem(point=f"要点{i}", details=[]) for i in range(1, 11)],
+                points=[PointItem(text=f"要点{i}") for i in range(1, 11)],
             )
         ],
     )

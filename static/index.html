@@ -480,24 +480,7 @@
     .point-main {
       font-weight: 500;
       color: var(--text-main);
-    }
-
-    .point-details {
-      margin-left: 16px;
-      margin-top: 4px;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .detail-item {
-      color: var(--text-sub);
-      font-size: 12.5px;
-    }
-
-    .detail-prefix {
-      font-weight: 600;
-      color: var(--text-main);
+      line-height: 1.5;
     }
 
     .topic-consensus {
@@ -738,7 +721,8 @@
           notes.topics.forEach(t => {
             if (t.points) {
               t.points.forEach(p => {
-                oldPoints.add(typeof p === "string" ? p : p.point);
+                const pt = typeof p === "string" ? p : (p.text || p.point || "");
+                if (pt) oldPoints.add(pt);
               });
             }
           });
@@ -749,8 +733,8 @@
           msg.data.topics.forEach(t => {
             if (t.points) {
               t.points.forEach(p => {
-                const pt = typeof p === "string" ? p : p.point;
-                if (!oldPoints.has(pt) && oldPoints.size > 0) {
+                const pt = typeof p === "string" ? p : (p.text || p.point || "");
+                if (pt && !oldPoints.has(pt) && oldPoints.size > 0) {
                   newPoints.add(pt);
                 }
               });
@@ -920,25 +904,17 @@
               <div class="topic-card-summary">${escapeHtml(topic.summary)}</div>
           `;
 
-          // 要点与细化展开（无 details 时单行清爽呈现，有 details 时缩进展开）
+          // 要点呈现（论据一体化单层高密度卡片，对齐 Cicada 原生设计）
           if (topic.points && topic.points.length > 0) {
             html += `<div class="topic-points">`;
             topic.points.forEach(p => {
-              const pointText = typeof p === "string" ? p : p.point;
-              const details = (p && p.details) ? p.details : [];
+              const pointText = typeof p === "string" ? p : (p.text || p.point || "");
+              if (!pointText) return;
+              const firstEv = (p && p.evidence && p.evidence.length > 0) ? p.evidence[0] : "";
               const isFresh = freshItems.has(pointText);
 
               html += `<div class="point-item ${isFresh ? 'is-fresh' : ''}">`;
-              html += `<div class="point-main">• ${escapeHtml(pointText)}${isFresh ? '<span class="tag-fresh">新</span>' : ''}</div>`;
-              // details 至多 1 条有意义的事实细节
-              const validDetails = details.slice(0, 1);
-              if (validDetails.length > 0) {
-                html += `<div class="point-details">`;
-                validDetails.forEach(d => {
-                  html += `<div class="detail-item">– ${formatDetailLine(d)}</div>`;
-                });
-                html += `</div>`;
-              }
+              html += `<div class="point-main" ${firstEv ? `onclick="jumpToLine('${firstEv}')" style="cursor:pointer;" title="点击跳转至支撑原话 ${firstEv}"` : ""}>• ${escapeHtml(pointText)}${isFresh ? '<span class="tag-fresh">新</span>' : ''}</div>`;
               html += `</div>`;
             });
             html += `</div>`;
@@ -1029,18 +1005,6 @@
         // 用户正在上方翻阅历史，保持其当前视口不动，不粗暴打扰阅读
         container.scrollTop = prevScrollTop;
       }
-    }
-
-    // 智能解析 details 中的“小标题：内容”并加粗冒号前标题
-    function formatDetailLine(text) {
-      if (!text) return "";
-      const colonIndex = text.indexOf("：") !== -1 ? text.indexOf("：") : text.indexOf(":");
-      if (colonIndex > 0 && colonIndex <= 10) {
-        const prefix = text.substring(0, colonIndex);
-        const rest = text.substring(colonIndex + 1);
-        return `<span class="detail-prefix">${escapeHtml(prefix)}：</span>${escapeHtml(rest)}`;
-      }
-      return escapeHtml(text);
     }
 
     function escapeHtml(str) {

@@ -908,8 +908,15 @@
           if (topic.points && topic.points.length > 0) {
             html += `<div class="topic-points">`;
             topic.points.forEach(p => {
-              const pointText = typeof p === "string" ? p : (p.text || p.point || "");
+              let pointText = "";
+              if (typeof p === "string") {
+                pointText = p;
+              } else if (p && typeof p === "object") {
+                pointText = p.point || p.text || p.content || p.title || "";
+              }
+              pointText = (pointText || "").trim();
               if (!pointText) return;
+
               const firstEv = (p && p.evidence && p.evidence.length > 0) ? p.evidence[0] : "";
               const isFresh = freshItems.has(pointText);
 

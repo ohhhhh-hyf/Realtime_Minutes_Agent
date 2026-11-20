@@ -5,32 +5,35 @@ from pydantic import BaseModel, Field, model_validator, field_validator
 
 
 class PointItem(BaseModel):
-    """议题下的单个论点项（论据一体化，彻底拔除 details，1:1 对齐 Cicada 原生架构）。"""
+    """议题下的单个论点项（论据一体化，双向兼容 point/text，彻底拔除 details）。"""
 
-    text: str = Field(..., description="论据一体化核心要点（完整断言，融入关键量化事实）")
+    point: str = Field(..., description="论据一体化核心要点（完整断言，融入关键量化事实）")
+    text: str = Field(..., description="论据一体化核心要点（与 point 镜像对齐）")
     evidence: List[str] = Field(default_factory=list, description="支撑原话行号")
 
     @model_validator(mode="before")
     @classmethod
     def normalize_input(cls, data: Any) -> Any:
         if isinstance(data, str):
-            return {"text": data, "evidence": []}
+            val = data.strip()
+            return {"point": val, "text": val, "evidence": []}
         if isinstance(data, dict):
-            # 兼容 text / point / content / title
-            text_val = data.get("text") or data.get("point") or data.get("content") or data.get("title") or "论点阐述"
+            # 兼容 text / point / content / title 任意模型返回格式
+            raw_text = data.get("text") or data.get("point") or data.get("content") or data.get("title") or ""
+            val = str(raw_text).strip()
             ev = data.get("evidence") or []
             if isinstance(ev, str):
                 ev = [ev] if ev else []
-            return {"text": str(text_val).strip(), "evidence": ev}
+            return {"point": val, "text": val, "evidence": ev}
+        if hasattr(data, "point") or hasattr(data, "text"):
+            raw_text = getattr(data, "text", None) or getattr(data, "point", None) or ""
+            val = str(raw_text).strip()
+            ev = getattr(data, "evidence", [])
+            return {"point": val, "text": val, "evidence": ev}
         return data
 
-    @property
-    def point(self) -> str:
-        """兼容已有代码与测试的 .point 属性访问。"""
-        return self.text
-
     def __str__(self) -> str:
-        return self.text
+        return self.point
 
 
 class FishboneBranch(BaseModel):

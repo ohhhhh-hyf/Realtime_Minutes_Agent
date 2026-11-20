@@ -177,10 +177,17 @@ if os.path.exists(static_dir):
 
 @app.get("/")
 async def get_index():
-    """提供 Web 看板首页。"""
+    """提供 Web 看板首页（禁用缓存以确保更新即时生效）。"""
     index_file = os.path.join(static_dir, "index.html")
     if os.path.exists(index_file):
-        return FileResponse(index_file)
+        return FileResponse(
+            index_file,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
     return {"message": "Realtime Minutes Agent API is running. static/index.html not found."}
 
 
